@@ -5,16 +5,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define BUFSIZE 30
+#define BUFSIZE 500
+#define NAMESIZE 30
 void error_handling(char *message);
 
 int main(int argc, char **argv){
 	int serv_sock;
-	char message[BUFSIZE];
-	int str_len, num=0;
-	
+	char buf[BUFSIZE];
+	char filename[NAMESIZE];
+	char checksum[NAMESIZE];
+	int bytes, num=0;
+	char *ptr;
+
+	struct timeval timeout = {5, 0};
 	struct sockaddr_in serv_addr;
 	struct sockaddr_in clnt_addr;
+
 	int clnt_addr_size;
 
 	if(argc!=2){
@@ -33,25 +39,69 @@ int main(int argc, char **argv){
 
 	if(bind(serv_sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr))==-1)
 		error_handling("bind() error");
-	
-	sleep(5);
+
+
+	// Recieve file name
 	while(1){
+		printf("Waiting for file name\n");	
 		clnt_addr_size=sizeof(clnt_addr);
-		sleep(1);
-		str_len = recvfrom(serv_sock, message, BUFSIZE, 0,
+		bytes = recvfrom(serv_sock, buf, BUFSIZE, 0,
 			(struct sockaddr*)&clnt_addr, &clnt_addr_size);
-		printf("Recieve Number : %d\n", num++);
-		printf("return from recvfrom: %d \n", str_len);
-		sendto(serv_sock, message, str_len, 0, (struct sockaddr*)&clnt_addr,
-			sizeof(clnt_addr));
+		
+		bzero(filename, NAMESIZE);
+		bzero(checksum, NAMESIZE);
+
+		ptr = strtok(buf, " ");
+		strcpy(filename, ptr);
+		ptr = strtok(NULL, " ");
+		strcpy(checksum, ptr);
+	
+		printf("Cmp [%s] vs [%s]\n", filename, checksum);
+		if(strcmp(filename, checksum) == 0)
+		{
+			printf("File name arrived without Loss\n");
+			if (setsockopt (serv_sock, SOL_SOCKET, SO_RCVTIMEO, 
+				(char *)&timeout, sizeof(timeout)) < 0)
+				error_handling("set sock time out opt failed.\n");
+
+			while(1)
+			{
+				printf("Sending ACK to Client\n");
+				sendto(serv_sock, filename, sizeof(filename), 0,
+					(struct sockaddr*)&clnt_addr, sizeof(clnt_addr));
+				bzero(buf, BUFSIZE);
+				bytes = recvfrom(serv_sock, buf, BUFSIZE, 0,
+					(struct sockaddr*)&clnt_addr, &clnt_addr_size);
+				if(bytes != -1) break;
+			}
+			break;
+		}
+		printf("File Name Loss Occured.\n");
+		bzero(buf, BUFSIZE);
 	}
 
+	// Recieve file content
+	printf("Saving file contents\n");
+
+	FILE *fp = fopen(filename, "wb");
+	fwrite(buf, sizeof(char), bytes, fp);
+
+	while(1){
+		bzero(buf, BUFSIZE);
+		clnt_addr_size=sizeof(clnt_addr);
+		bytes = recvfrom(serv_sock, buf, BUFSIZE, 0,
+			(struct sockaddr*)&clnt_addr, &clnt_addr_size);
+		if (bytes == -1) break;
+		fwrite(buf, sizeof(char), bytes, fp);
+	}
+	fclose(fp);
+	printf("File saving finished\n");
 	return 0;
 }
 
-void error_handling(char *message)
+void error_handling(char *buf)
 {
-	fputs(message, stderr);
+	fputs(buf, stderr);
 	fputc('\n', stderr);
 	exit(1);
 }	
