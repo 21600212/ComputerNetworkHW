@@ -42,7 +42,7 @@ int main(int argc, char **argv){
 		error_handling("No such file");
 
 	printf("Sending file  %s\n", filename);	
-	char *c = "*";
+	char *c = " ";
 	strcat(filename, c);
 	
 	send(sock, filename, strlen(filename), 0);
