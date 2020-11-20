@@ -5,8 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define BUFSIZE 30
+#define BUFSIZE 4096
 void error_handling(char *message);
+void write_file(int sock);
 
 int main(int argc, char **argv){
 	int serv_sock, clnt_sock;
@@ -42,18 +43,47 @@ int main(int argc, char **argv){
 	if(clnt_sock==-1)
 		error_handling("accept() error");
 	
-	//sleep(5);
-	while(1){
-		clnt_addr_size=sizeof(clnt_addr);
-		//sleep(1);
-		str_len = recv(clnt_sock, message, BUFSIZE, 0);
-		printf("Recieve Number : %d\n", num++);
-		printf("return from recv: %d \n", str_len);
-		send(clnt_sock, message, str_len, 0);
-	}
+	write_file(clnt_sock);
 	
 	close(clnt_sock);
 	return 0;
+}
+
+void write_file(int sock){
+	int bytes;
+	FILE *fp;
+	char buf[BUFSIZE];
+	char filename[30];
+
+	bytes = recv(sock, buf, BUFSIZE, 0);
+
+	char *ptr = strtok(buf, " ");
+	strcpy(filename, ptr);
+
+	fp = fopen(filename, "wb");
+	printf("filename arrived: %s\n", filename);
+
+	ptr = strtok(NULL, " ");
+	while (ptr != NULL)
+	{
+		fwrite(ptr, sizeof(char), sizeof(ptr), fp);
+		ptr = strtok(NULL, " ");
+	}
+	
+	bzero(buf, BUFSIZE);
+	bytes = 0;
+	
+	while(bytes = recv(sock, buf, BUFSIZE, 0)) {
+		if (bytes < 0)
+			error_handling("Receive Error\n");
+		if (fwrite(buf, sizeof(char), bytes, fp) < bytes)
+			error_handling("File Writing Error\n");
+		bzero(buf, BUFSIZE);
+	}
+	fclose(fp);
+	printf("File %s is received.\n", filename);
+
+	return;
 }
 
 void error_handling(char *message)

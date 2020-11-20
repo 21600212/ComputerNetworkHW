@@ -7,21 +7,21 @@
 
 #define BUFSIZE 30
 void error_handling(char *message);
+void send_filename(char filename[30], int sock);
+void send_file(FILE *fp, int sock);
 
 int main(int argc, char **argv){
 	int sock;
-	char message[BUFSIZE];
-	int str_len, addr_size, i;
-	
-	char MSG1[] = "Good ";
-	char MSG2[] = "Evening ";
-	char MSG3[] = "Everybody!";
+	char buf[BUFSIZE];
+	int bytes, addr_size, i;
+	char filename[30];
 
+	struct timeval timeout = {5, 0};
 	struct sockaddr_in serv_addr;
 	struct sockaddr_in from_addr;
 
-	if(argc!=3){
-		printf("Usage : %s <port>\n", argv[0]);
+	if(argc!=4){
+		printf("Usage : %s <ip> <port> <fname>\n", argv[0]);
 		exit(1);
 	}
 
@@ -33,19 +33,51 @@ int main(int argc, char **argv){
 	serv_addr.sin_family=AF_INET;
 	serv_addr.sin_addr.s_addr=inet_addr(argv[1]);
 	serv_addr.sin_port=htons(atoi(argv[2]));
-	sendto(sock, MSG1, strlen(MSG1), 0, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-	sendto(sock, MSG2, strlen(MSG2), 0, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-	sendto(sock, MSG3, strlen(MSG3), 0, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-	sendto(sock, "", 0, 0, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
 
-	for(i=0; i<4; i++)
+	strcpy(filename, argv[3]);
+
+	FILE *fp = fopen(filename, "rb");
+	if (fp == NULL)
+		error_handling("No such file");
+	
+	
+	if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+		error_handling("set sock time out opt failed.\n");
+
+	char checksum[60];
+	strcpy(checksum, filename);
+	strcat(checksum, " ");
+	strcat(checksum, filename);
+
+	// Send file name
+	printf("Sending File Name\n");		
+	while(1)
 	{
+		sendto(sock, checksum, strlen(checksum), 0, 
+			(struct sockaddr*)&serv_addr, sizeof(serv_addr));
+		
 		addr_size = sizeof(from_addr);
-		str_len = recvfrom(sock, message, BUFSIZE, 0,
+		bytes = recvfrom(sock, buf, BUFSIZE, 0,
 			(struct sockaddr*)&from_addr, &addr_size);
-		message[str_len]='\0';
-		printf(" Message %d from server: %s \n", i, message);
+		
+		if(bytes == -1)
+			printf("recv time out. Trying it again\n");
+		else
+		{
+			printf("Server got file name\n", buf);
+			break;
+		}
 	}
+
+	// Send file contents
+	printf("Sending File Contents\n");
+	while((bytes = fread(buf, sizeof(char), BUFSIZE, fp)) > 0){
+		bzero(buf, BUFSIZE);
+		sendto(sock, buf, bytes, 0, 
+			(struct sockaddr*)&serv_addr, sizeof(serv_addr));
+	}
+
+	fclose(fp);
 	close(sock);
 	return 0;
 }
