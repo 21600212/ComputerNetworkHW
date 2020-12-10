@@ -8,6 +8,7 @@
 #define BUFSIZE 4096
 #define CODE200 "HTTP/1.0 200 OK\nContent-type: text/html\n\n"
 #define CODE404 "HTTP/1.0 404 Not Found\nContent-type: text/html\n\n"
+
 void error_handling(char *message);
 void respond(int sock);
 
@@ -107,23 +108,7 @@ void respond(int sock){
     }
     temp = next + 2;
 
-    strcpy(html,
-        "<!DOCTYPE html>\n"
-        "<html lang = \"ja\">\n"
-        "<head>\n"
-        "<meta charset = \"utf-8\">\n"
-        "</head>\n"
-        "<body>\n<h2>");
-
-    if(send(sock, html, strlen(html), 0) < 0)
-      error_handling("Send error\n");
-
-    if(send(sock, temp, strlen(temp), 0) < 0)
-      error_handling("Send error\n");
-
-    strcpy(html,
-        "</h2></body>"
-        "</html>");
+    sprintf(html, "<!DOCTYPE html><html><head></head><body><h2>%s</h2></body></html>", temp);
 
     if(send(sock, html, strlen(html), 0) < 0)
       error_handling("Send error\n");
